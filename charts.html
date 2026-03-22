@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autoresearch Charts</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fff; color: #1a1a1a; padding: 40px 20px; }
+  .container { max-width: 800px; margin: 0 auto; }
+  .chart-section { margin-bottom: 60px; }
+  .chart-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .chart-subtitle { font-size: 14px; color: #666; margin-bottom: 20px; }
+  .chart-wrapper { background: #fafafa; border: 1px solid #eee; border-radius: 12px; padding: 24px; }
+  canvas { max-height: 420px; }
+
+  .comparison-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .comparison-table th { text-align: left; padding: 12px 16px; font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #eee; }
+  .comparison-table td { padding: 12px 16px; font-size: 15px; border-bottom: 1px solid #f0f0f0; }
+  .comparison-table tr:last-child td { border-bottom: none; }
+  .comparison-table .gpu-name { font-weight: 600; }
+  .a40-color { color: #3b82f6; }
+  .h100-color { color: #8b5cf6; }
+  .winner { background: #f0fdf4; }
+
+  .stat-row { display: flex; gap: 16px; margin-bottom: 40px; }
+  .stat-card { flex: 1; background: #fafafa; border: 1px solid #eee; border-radius: 12px; padding: 20px; text-align: center; }
+  .stat-number { font-size: 28px; font-weight: 700; color: #1a1a1a; }
+  .stat-label { font-size: 13px; color: #666; margin-top: 4px; }
+  .stat-number.green { color: #22c55e; }
+  .stat-number.red { color: #ef4444; }
+  .stat-number.blue { color: #3b82f6; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Summary Stats -->
+  <div class="stat-row">
+    <div class="stat-card">
+      <div class="stat-number">16</div>
+      <div class="stat-label">Experiments Run</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number green">4</div>
+      <div class="stat-label">Improvements Found</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number">1.098 → 1.095</div>
+      <div class="stat-label">val_bpb (lower is better)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number blue">~$15</div>
+      <div class="stat-label">Total Cost</div>
+    </div>
+  </div>
+
+  <!-- Chart 1: All Experiments -->
+  <div class="chart-section">
+    <div class="chart-title">All 16 Experiments</div>
+    <div class="chart-subtitle">Green = kept (improved over best), Red = discarded (worse)</div>
+    <div class="chart-wrapper">
+      <canvas id="allExperiments"></canvas>
+    </div>
+  </div>
+
+  <!-- Chart 2: Progress -->
+  <div class="chart-section">
+    <div class="chart-title">val_bpb Progress Over Time</div>
+    <div class="chart-subtitle">Each experiment tries to beat the current best score</div>
+    <div class="chart-wrapper">
+      <canvas id="progress"></canvas>
+    </div>
+  </div>
+
+  <!-- Chart 3: A40 vs H100 -->
+  <div class="chart-section">
+    <div class="chart-title">A40 vs H100 — Budget vs Premium</div>
+    <div class="chart-subtitle">Same code, different hardware, different optimal configurations</div>
+    <div class="chart-wrapper" style="padding: 0;">
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th class="a40-color">A40 ($0.40/hr)</th>
+            <th class="h100-color">H100 ($3.59/hr)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>VRAM</td>
+            <td>48 GB</td>
+            <td>80 GB</td>
+          </tr>
+          <tr>
+            <td>Optimal Depth</td>
+            <td class="gpu-name">6 layers</td>
+            <td class="gpu-name">8+ layers</td>
+          </tr>
+          <tr>
+            <td>Model Size</td>
+            <td>26.3M params</td>
+            <td>50.3M params</td>
+          </tr>
+          <tr>
+            <td>Steps in 5 min</td>
+            <td>1,175</td>
+            <td>~2,500</td>
+          </tr>
+          <tr>
+            <td>Tokens Processed</td>
+            <td>154M</td>
+            <td>~500M</td>
+          </tr>
+          <tr class="winner">
+            <td>Cost for 16 experiments</td>
+            <td class="gpu-name a40-color">~$1.60</td>
+            <td class="gpu-name h100-color">~$14.36</td>
+          </tr>
+          <tr class="winner">
+            <td>Experiments per $10</td>
+            <td class="gpu-name a40-color">~100</td>
+            <td class="gpu-name h100-color">~11</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const experiments = [
+  { name: "Baseline", score: 1.0980, status: "keep" },
+  { name: "Depth 6→8", score: 1.1017, status: "discard" },
+  { name: "Window L→SSSL", score: 1.0961, status: "keep" },
+  { name: "Depth 8+SSSL", score: 1.0990, status: "discard" },
+  { name: "Depth 4+SSSL", score: 1.1549, status: "discard" },
+  { name: "Warmdown→0.3", score: 1.0994, status: "discard" },
+  { name: "Warmdown→0.7", score: 1.0960, status: "keep" },
+  { name: "Halve batch", score: 1.1007, status: "discard" },
+  { name: "GQA (kv=1)", score: 1.1078, status: "discard" },
+  { name: "HEAD_DIM→64", score: 1.1032, status: "discard" },
+  { name: "Matrix LR→0.05", score: 1.0961, status: "discard" },
+  { name: "MLP ratio→3", score: 1.1000, status: "discard" },
+  { name: "Warmdown→0.8", score: 1.0961, status: "discard" },
+  { name: "Window→S", score: 1.0966, status: "discard" },
+  { name: "LR floor→5%", score: 1.0949, status: "keep" },
+  { name: "LR floor→10%", score: 1.0961, status: "discard" },
+];
+
+const colors = experiments.map(e => e.status === "keep" ? "#22c55e" : "#ef4444");
+const borderColors = experiments.map(e => e.status === "keep" ? "#16a34a" : "#dc2626");
+
+// Chart 1: Bar chart
+new Chart(document.getElementById("allExperiments"), {
+  type: "bar",
+  data: {
+    labels: experiments.map(e => e.name),
+    datasets: [{
+      data: experiments.map(e => e.score),
+      backgroundColor: colors,
+      borderColor: borderColors,
+      borderWidth: 1,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const exp = experiments[ctx.dataIndex];
+            return `val_bpb: ${exp.score.toFixed(4)} (${exp.status})`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        min: 1.085,
+        max: 1.16,
+        title: { display: true, text: "val_bpb (lower is better)", font: { size: 12 } },
+        grid: { color: "#f0f0f0" }
+      },
+      x: {
+        ticks: { maxRotation: 45, minRotation: 45, font: { size: 10 } },
+        grid: { display: false }
+      }
+    }
+  }
+});
+
+// Chart 2: Progress line
+const bestSoFar = [];
+let currentBest = experiments[0].score;
+experiments.forEach(e => {
+  if (e.score < currentBest) currentBest = e.score;
+  bestSoFar.push(currentBest);
+});
+
+new Chart(document.getElementById("progress"), {
+  type: "line",
+  data: {
+    labels: experiments.map((_, i) => `#${i + 1}`),
+    datasets: [
+      {
+        label: "Experiment result",
+        data: experiments.map(e => e.score),
+        borderColor: "#94a3b8",
+        backgroundColor: experiments.map(e => e.status === "keep" ? "#22c55e" : "#94a3b8"),
+        pointBackgroundColor: experiments.map(e => e.status === "keep" ? "#22c55e" : "#94a3b8"),
+        pointRadius: experiments.map(e => e.status === "keep" ? 7 : 5),
+        pointBorderColor: "#fff",
+        pointBorderWidth: 2,
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+        fill: false,
+        tension: 0,
+      },
+      {
+        label: "Best so far",
+        data: bestSoFar,
+        borderColor: "#22c55e",
+        backgroundColor: "rgba(34, 197, 94, 0.08)",
+        pointRadius: 0,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.1,
+        stepped: "before",
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: "top", labels: { usePointStyle: true, font: { size: 12 } } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            if (ctx.datasetIndex === 0) {
+              const exp = experiments[ctx.dataIndex];
+              return `${exp.name}: ${exp.score.toFixed(4)} (${exp.status})`;
+            }
+            return `Best: ${ctx.raw.toFixed(4)}`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        min: 1.088,
+        max: 1.16,
+        title: { display: true, text: "val_bpb (lower is better)", font: { size: 12 } },
+        grid: { color: "#f0f0f0" }
+      },
+      x: {
+        title: { display: true, text: "Experiment #", font: { size: 12 } },
+        grid: { display: false }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
