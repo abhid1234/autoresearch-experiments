@@ -21,3 +21,11 @@ dev/
 
 # Results file
 results.tsv
+
+# Content/marketing files
+content.md
+charts.html
+experiments_table.html
+cost_table.html
+generate_charts.py
+chart_*.png
